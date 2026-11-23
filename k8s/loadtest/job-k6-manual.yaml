@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-a
+  namespace: loadtest
+  labels:
+    app: k6
+    target: a
+    part-of: playground
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      labels:
+        app: k6
+        target: a
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.50.0
+          imagePullPolicy: IfNotPresent
+          args: ["run", "--address", "0.0.0.0:6565", "/scripts/load.js"]
+          env:
+            - name: BASE_URL
+              value: "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+            - name: TARGET
+              value: "a"
+            - name: ROUTE
+              value: "chain"
+            - name: TARGETS
+              value: "b"
+            - name: WORK_MS
+              value: "50"
+            - name: SLEEP_MS
+              value: "50"
+            - name: INITIAL_VUS
+              value: "60"
+          ports:
+            - name: control
+              containerPort: 6565
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: k6-script
+

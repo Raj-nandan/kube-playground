@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+  namespace: platform
+  labels:
+    app: control-api
+    part-of: playground
+spec:
+  selector:
+    app: control-api
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+

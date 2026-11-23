@@ -1,0 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-api-loadtest
+  namespace: loadtest
+  labels:
+    app: control-api
+    part-of: playground
+subjects:
+  - kind: ServiceAccount
+    name: control-api
+    namespace: platform
+roleRef:
+  kind: Role
+  name: control-api-loadtest
+  apiGroup: rbac.authorization.k8s.io
+

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  namespace: platform
+  labels:
+    app: control-api
+    part-of: playground
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-api
+  template:
+    metadata:
+      labels:
+        app: control-api
+        part-of: playground
+    spec:
+      serviceAccountName: control-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: control-api
+          image: control-api:v2
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+            - name: APPS_NAMESPACE
+              value: "apps"
+            - name: LOADTEST_NAMESPACE
+              value: "loadtest"
+            - name: POLL_INTERVAL_MS
+              value: "2000"
+            - name: BASE_URL
+              value: "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+            - name: K6_IMAGE
+              value: "grafana/k6:0.50.0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+

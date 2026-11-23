@@ -1,0 +1,31 @@
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const options = {
+  scenarios: {
+    load: {
+      executor: 'externally-controlled',
+      vus: Number(__ENV.INITIAL_VUS || 0),
+      maxVUs: 500,
+      duration: '1h',
+    },
+  },
+};
+
+export default function () {
+  const t = __ENV.TARGET;
+  const q = `ms=${__ENV.WORK_MS}`;
+  let path = 'work';
+  let extra = '';
+  if (__ENV.ROUTE === 'chain') {
+    path = 'chain';
+    extra = `&path=${__ENV.TARGETS}`;
+  }
+  if (__ENV.ROUTE === 'fanout') {
+    path = 'fanout';
+    extra = `&targets=${__ENV.TARGETS}`;
+  }
+  http.get(`${__ENV.BASE_URL}/${t}/${path}?${q}${extra}`);
+  sleep(Number(__ENV.SLEEP_MS || 100) / 1000);
+}
+
