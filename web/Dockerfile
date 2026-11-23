@@ -1,4 +1,22 @@
-FROM node:22-alpine
+# Stage 1: Install dependencies
+FROM node:22-alpine AS deps
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Stage 2: Build Next.js application
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# Stage 3: Production runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
@@ -7,9 +25,9 @@ ENV NODE_ENV=production \
 
 USER node
 
-COPY --chown=node:node .next/standalone ./
-COPY --chown=node:node .next/static ./.next/static
-COPY --chown=node:node public ./public
+COPY --chown=node:node --from=builder /app/.next/standalone ./
+COPY --chown=node:node --from=builder /app/.next/static ./.next/static
+COPY --chown=node:node --from=builder /app/public ./public
 
 EXPOSE 3000
 

@@ -2,7 +2,7 @@
 
 > An interactive, observable Kubernetes laboratory for exploring microservices orchestration, real-time autoscaling, and traffic dynamics under live load.
 
-<!-- GitHub Repository: [Add your GitHub repository URL here] -->
+GitHub Repository: [https://github.com/username/kube-playground.git](https://github.com/username/kube-playground.git) *(update with your repository URL)*
 
 ---
 
@@ -18,7 +18,6 @@ Instead of working with opaque black-box services or static examples, Kube Playg
 
 Understanding Kubernetes mechanics—such as Pod lifecycles, Horizontal Pod Autoscaling (HPA), Ingress routing, resource requests versus limits, and multi-service failure propagation—is often challenging:
 - Static documentation explains API schemas, but does not visualize real-time behavior under fluctuating workloads.
-- Public cloud clusters can be slow to spin up, incur ongoing operational costs, and abstract away node-level primitives.
 - Typical sample applications are either overly simplistic (e.g., a static `nginx` container) or too complex to easily modify and debug locally.
 
 **Kube Playground** solves this by providing a self-contained, reproducible playground where workloads generate authentic CPU burn and distributed network traffic, exposing all internal telemetry to a real-time reactive dashboard.
@@ -30,24 +29,24 @@ Understanding Kubernetes mechanics—such as Pod lifecycles, Horizontal Pod Auto
 ```
                     ┌───────────────────────────────────────────────┐
                     │               Developer Browser               │
-                    └───────┬───────────────────────────────┬───────┘
-                            │ :3000                         │ :4000
-                            ▼                               ▼
+                    └───────────────────────┬───────────────────────┘
+                                            │ HTTP :3000
+                                            ▼
   ┌────────────────────────────────────────────────────────────────────────┐
   │ Kubernetes Cluster (Minikube)                                          │
   │                                                                        │
   │  [ platform namespace ]                                                │
-  │   ┌─────────────────────┐             ┌───────────────────────────┐    │
-  │   │   Web Dashboard     │◀───────────▶│   Control API Backend     │    │
-  │   │   (Next.js React)   │             │   (Node.js Fastify)       │    │
-  │   └─────────────────────┘             └─────────────┬─────────────┘    │
-  │                                                     │                  │
-  │  [ loadtest namespace ]                             │ Controls Jobs    │
-  │   ┌─────────────────────────────────────────┐       │ via K8s API      │
-  │   │   k6 Load Generator (batch/v1 Jobs)     │◀──────┘                  │
+  │   ┌─────────────────────┐  Cluster DNS  ┌───────────────────────────┐  │
+  │   │   Web Dashboard     │──────────────▶│   Control API Backend     │  │
+  │   │   (Next.js React)   │  /api/* proxy │   (Node.js Fastify :4000) │  │
+  │   └─────────────────────┘               └─────────────┬─────────────┘  │
+  │                                                       │                │
+  │  [ loadtest namespace ]                               │ Controls Jobs  │
+  │   ┌─────────────────────────────────────────┐         │ via K8s API    │
+  │   │   k6 Load Generator (batch/v1 Jobs)     │◀────────┘                │
   │   └────────────────────┬────────────────────┘                          │
   │                        │                                               │
-  │  [ apps namespace ]    │ HTTP Traffic                                  │
+  │  [ apps namespace ]    │ In-Cluster Traffic                            │
   │                        ▼                                               │
   │               ┌─────────────────┐                                      │
   │               │  Ingress NGINX  │                                      │
@@ -65,9 +64,9 @@ Understanding Kubernetes mechanics—such as Pod lifecycles, Horizontal Pod Auto
   └────────────────────────────────────────────────────────────────────────┘
 ```
 
-The system is separated into three distinct namespaces:
-1. **`apps`**: Houses the core business microservices (`svc-a`, `svc-b`, `svc-c`), their cluster-internal Services, HPAs, and Ingress rules.
-2. **`platform`**: Houses the control plane components—the `control-api` backend (which queries the Kubernetes API and streams telemetry) and the `web` dashboard frontend.
+### Namespace Responsibilities:
+1. **`platform`**: Houses the control plane components. The **Web Dashboard** runs on port `3000` and transparently proxies `/api/*` calls over in-cluster DNS to the **Control API Backend** on port `4000`. The browser only needs to connect to port `3000`.
+2. **`apps`**: Houses the business microservices (`svc-a`, `svc-b`, `svc-c`), their cluster-internal Services, HPAs, and Ingress routing paths.
 3. **`loadtest`**: An isolated sandbox where the control backend schedules ephemeral `k6` load generation jobs.
 
 ---
@@ -79,7 +78,7 @@ The system is separated into three distinct namespaces:
 - **Autoscaling & Ingress**: Horizontal Pod Autoscaler (HPA v2), Kubernetes `metrics-server`, Ingress-NGINX Controller
 - **Control Backend**: Fastify, `@kubernetes/client-node`, Server-Sent Events (SSE)
 - **Dashboard UI**: Next.js 14 (App Router), React, Tailwind CSS, Lucide Icons
-- **Load Generation**: Grafana k6 (distributed load profiles, externally tunable)
+- **Load Generation**: Grafana k6 (pinned to `v0.50.0` for dynamic status control)
 
 ---
 
@@ -96,7 +95,7 @@ kube-playground/
 │   │   └── ingress-playground.yaml
 │   ├── platform/                # Platform control plane manifests
 │   │   ├── deployment-control-api.yaml
-│   │   ├── deployment-web.yaml
+│   │   ├── deployment-web.yaml  # Pinned to web:v1 with imagePullPolicy: Never
 │   │   ├── ingress-platform.yaml
 │   │   └── role-control-api-*.yaml # Scoped RBAC configurations
 │   └── loadtest/                # k6 load testing scripts and ConfigMaps
@@ -106,38 +105,43 @@ kube-playground/
 │   └── package.json
 ├── control-api/                 # Cluster telemetry and job management backend
 │   ├── src/                     # Kubernetes API polling, k6 executor, SSE streaming
-│   ├── Dockerfile
+│   ├── Dockerfile               # Hermetic multi-stage build (npm ci -> tsc -> runner)
 │   └── package.json
 ├── web/                         # Next.js interactive live dashboard
 │   ├── app/                     # React dashboard pages and API proxying
 │   ├── components/              # Live pod cards, load panels, call graphs, event feed
 │   ├── lib/                     # Real-time state synchronization hooks
-│   └── Dockerfile
+│   ├── Dockerfile               # Hermetic multi-stage build (npm ci -> build -> runner)
+│   └── package.json
 ├── k6/                          # Synthetic traffic simulation scenarios
-├── docker-compose.yml           # Local multi-container development composition
-└── AGENT.md                     # Engineering conventions and operational guidance
+└── docker-compose.yml           # Local multi-container development composition
 ```
 
 ---
 
 ## Setup Requirements
 
-Before getting started, ensure the following prerequisites are installed on your machine:
+Before getting started, ensure the following prerequisites are installed:
 
-- **Docker Desktop** (or Docker Engine with Linux containers enabled)
+- **Git**
+- **Docker Desktop** (with Linux containers enabled)
 - **Minikube** (v1.32.0 or newer)
 - **kubectl** (Kubernetes command-line tool)
-- **Node.js** (v20 LTS or v22) & **npm**
 
 ---
 
 ## How to Setup
 
-Follow these steps to build and launch the playground from scratch:
+### 1. Clone the Repository
 
-### 1. Initialize Minikube
+```bash
+git clone https://github.com/username/kube-playground.git
+cd kube-playground
+```
 
-Start Minikube using the Docker driver with recommended resources and enable the required addons:
+### 2. Initialize Minikube
+
+Start Minikube with the Docker driver and enable the required addons:
 
 ```bash
 minikube start --driver=docker --cpus=3 --memory=3072
@@ -145,9 +149,9 @@ minikube addons enable metrics-server
 minikube addons enable ingress
 ```
 
-### 2. Build Container Images
+### 3. Build All Container Images
 
-Build the service, backend, and frontend images:
+All images build hermetically inside Docker using multi-stage Dockerfiles (no host-level build dependencies required):
 
 ```bash
 # Microservices (build versions for release testing)
@@ -159,24 +163,24 @@ docker build -t svc-c:current --build-arg SERVICE_NAME=svc-c --build-arg RELEASE
 docker build -t svc-c:next --build-arg SERVICE_NAME=svc-c --build-arg RELEASE=next -f services/Dockerfile services/
 
 # Control API Backend
-cd control-api && npm run build && docker build -t control-api:v2 . && cd ..
+docker build -t control-api:v2 ./control-api
 
-# Web Dashboard
-cd web && npm run build && docker build -t web:latest . && cd ..
+# Web Dashboard (pinned to explicit version web:v1)
+docker build -t web:v1 ./web
 
-# Load Generator
+# Pinned Load Generator Image
 docker pull grafana/k6:0.50.0
 ```
 
-### 3. Load Images into the Minikube Cluster
+### 4. Load Images into the Minikube Cluster
 
 Transfer the locally built images directly into Minikube's Docker runtime:
 
 ```bash
-minikube image load svc-a:blue svc-a:green svc-b:stable svc-b:canary svc-c:current svc-c:next control-api:v2 web:latest grafana/k6:0.50.0
+minikube image load svc-a:blue svc-a:green svc-b:stable svc-b:canary svc-c:current svc-c:next control-api:v2 web:v1 grafana/k6:0.50.0
 ```
 
-### 4. Deploy Manifests to Kubernetes
+### 5. Deploy Manifests to Kubernetes
 
 Apply the resource definitions in order:
 
@@ -197,7 +201,17 @@ kubectl apply -f k8s/loadtest/configmap-k6-script.yaml
 kubectl apply -f k8s/platform/
 ```
 
-### 5. Access the Dashboard
+Verify that all pods are ready (`1/1 Running`):
+```bash
+kubectl get pods -n apps
+kubectl get pods -n platform
+```
+
+---
+
+## Accessing the Playground
+
+### 1. Web Dashboard Access
 
 Forward the dashboard port to your host machine:
 
@@ -208,22 +222,63 @@ kubectl port-forward -n platform svc/web 3000:3000
 Open your browser and navigate to:
 **`http://localhost:3000`**
 
+*(Note: The Web Dashboard automatically proxies all `/api/*` telemetry and control calls to `control-api:4000` internally. If you wish to query the Control API directly via Postman or curl, you can optionally run `kubectl port-forward -n platform svc/control-api 4000:4000`).*
+
+### 2. Direct Microservice Ingress Access (`/a`, `/b`, `/c`)
+
+On Windows with Docker-driver Minikube, the Minikube VM IP is not directly routable from the host. To reach the Ingress controller and call microservices directly from your host terminal:
+
+```bash
+# Forward Ingress-NGINX controller port 80 to host port 8080
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+```
+
+Now you can test microservice endpoints directly from your host:
+```bash
+# Call svc-a
+curl http://localhost:8080/a/whoami
+
+# Multi-hop chain call (svc-a -> svc-b -> svc-c)
+curl "http://localhost:8080/a/chain?targets=svc-b,svc-c"
+
+# Fanout call (svc-a calling svc-b and svc-c in parallel)
+curl "http://localhost:8080/a/fanout?targets=svc-b,svc-c"
+```
+
+---
+
+## Rebuilding & Updating Services (Hot Reloading)
+
+When modifying source code locally:
+1. Rebuild the Docker image:
+   ```bash
+   docker build -t control-api:v2 ./control-api
+   ```
+2. Reload it into Minikube:
+   ```bash
+   minikube image load control-api:v2 --overwrite
+   ```
+3. **Restart the deployment**: Because Kubernetes caches running image tags, force a rollout restart so pods update to the new image layers immediately:
+   ```bash
+   kubectl rollout restart deployment/control-api -n platform
+   # Or for web:
+   kubectl rollout restart deployment/web -n platform
+   ```
+
 ---
 
 ## What to Expect
 
-Once the dashboard is running, you can interact with the live cluster:
-
 1. **Real-Time Cluster Visibility**:
    - The top navigation bar indicates active cluster connectivity, total pod count, and healthy container status.
    - Individual microservice lanes (`svc-a`, `svc-b`, `svc-c`) render active pod cards showing live CPU consumption, assigned release version, restart counts, and readiness states.
-   - On browser refresh, the dashboard immediately synchronizes with the true state of the cluster.
+   - On browser refresh (F5), the dashboard immediately synchronizes with the true state of the cluster.
 
 2. **Interactive Load Injection & Dynamic Scaling**:
    - Use the **Load Drivers** control panels to configure target virtual users (VUs), workload duration (ms of CPU burn per request), and routing paths (`/work`, `/chain`, `/fanout`).
    - Click **Start Load** on a service. Within seconds, observe CPU saturation register on the pod cards.
    - When utilization exceeds the 50% target threshold, the Kubernetes Horizontal Pod Autoscaler triggers automatic scale-out, dynamically provisioning new pod replicas in real time.
-   - Click **Stop Load** to stop the traffic. After the stabilization window expires, the HPA will automatically scale the service back down to baseline.
+   - Click **Stop Load** to stop traffic. After the stabilization window expires, the HPA will automatically scale the service back down to baseline.
 
 3. **Topology & Event Feed**:
    - Inspect the dynamic call graph as requests flow across chained microservice boundaries.
