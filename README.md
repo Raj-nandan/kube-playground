@@ -2,8 +2,6 @@
 
 > An interactive, observable Kubernetes laboratory for exploring microservices orchestration, real-time autoscaling, and traffic dynamics under live load.
 
-GitHub Repository: [https://github.com/username/kube-playground.git](https://github.com/username/kube-playground.git) *(update with your repository URL)*
-
 ---
 
 ## Overview
@@ -135,7 +133,7 @@ Before getting started, ensure the following prerequisites are installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/username/kube-playground.git
+git clone https://github.com/Raj-nandan/kube-playground.git
 cd kube-playground
 ```
 
