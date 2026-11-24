@@ -1,0 +1,87 @@
+{{- range $svcName, $svc := .Values.services }}
+{{- range $trackName, $track := $svc.tracks }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-{{ $svcName }}-{{ $trackName }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+    track: {{ $trackName }}
+spec:
+  replicas: {{ $track.replicas }}
+  selector:
+    matchLabels:
+      app: svc-{{ $svcName }}
+      track: {{ $trackName }}
+  {{- if and (eq $svc.strategy "rolling-update") $svc.rollingUpdate }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ $svc.rollingUpdate.maxSurge | default 1 }}
+      maxUnavailable: {{ $svc.rollingUpdate.maxUnavailable | default 0 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "playground.labels" $ | nindent 8 }}
+        app: svc-{{ $svcName }}
+        track: {{ $trackName }}
+      {{- if $.Values.mesh.enabled }}
+      annotations:
+        sidecar.istio.io/proxyCPU: {{ $.Values.mesh.sidecar.proxyCPU | quote }}
+        sidecar.istio.io/proxyMemory: {{ $.Values.mesh.sidecar.proxyMemory | quote }}
+      {{- end }}
+    spec:
+      serviceAccountName: svc-{{ $svcName }}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: app
+          image: "{{ $track.image }}:{{ $track.tag }}"
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: {{ $svc.ports.http | default 8080 }}
+            - name: admin
+              containerPort: {{ $svc.ports.admin | default 9090 }}
+          env:
+            - name: SERVICE_NAME
+              value: {{ $svcName | quote }}
+            - name: TRACK
+              value: {{ $trackName | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: RELEASE_LABEL
+              value: {{ $track.tag | quote }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            initialDelaySeconds: 2
+            periodSeconds: 5
+{{- end }}
+{{- end }}

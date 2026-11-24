@@ -1,0 +1,33 @@
+{{- if .Values.mesh.enabled }}
+{{- range $svcName, $svc := .Values.services }}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: svc-{{ $svcName }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+spec:
+  selector:
+    matchLabels:
+      app: svc-{{ $svcName }}
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account
+              {{- range $otherSvcName, $otherSvc := $.Values.services }}
+              {{- if ne $otherSvcName $svcName }}
+              - cluster.local/ns/{{ $.Release.Namespace }}/sa/svc-{{ $otherSvcName }}
+              {{- end }}
+              {{- end }}
+      to:
+        - operation:
+            ports: [{{ $svc.ports.http | default 8080 | quote }}]
+    - to:
+        - operation:
+            ports: [{{ $svc.ports.admin | default 9090 | quote }}]
+{{- end }}
+{{- end }}

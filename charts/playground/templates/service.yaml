@@ -1,0 +1,23 @@
+{{- range $svcName, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-{{ $svcName }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+spec:
+  selector:
+    app: svc-{{ $svcName }}
+    {{- if and (not $.Values.mesh.enabled) (eq $svc.strategy "blue-green") }}
+    track: {{ $svc.activeTrack }}
+    {{- end }}
+  ports:
+    - name: http
+      port: {{ $svc.ports.http | default 8080 }}
+      targetPort: http
+    - name: admin
+      port: {{ $svc.ports.admin | default 9090 }}
+      targetPort: admin
+{{- end }}

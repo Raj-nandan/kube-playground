@@ -1,0 +1,50 @@
+{{- range $svcName, $svc := .Values.services }}
+{{- if and $svc.hpa $svc.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: svc-{{ $svcName }}-{{ $svc.activeTrack }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+    track: {{ $svc.activeTrack }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: svc-{{ $svcName }}-{{ $svc.activeTrack }}
+  minReplicas: {{ $svc.hpa.minReplicas | default 1 }}
+  maxReplicas: {{ $svc.hpa.maxReplicas | default 5 }}
+  metrics:
+    {{- if $.Values.mesh.enabled }}
+    - type: ContainerResource
+      containerResource:
+        name: cpu
+        container: app
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.hpa.targetCpu | default 50 }}
+    {{- else }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.hpa.targetCpu | default 50 }}
+    {{- end }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 15
+{{- end }}
+{{- end }}

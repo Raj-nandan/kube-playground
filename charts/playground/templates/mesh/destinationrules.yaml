@@ -1,0 +1,23 @@
+{{- if .Values.mesh.enabled }}
+{{- range $svcName, $svc := .Values.services }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: svc-{{ $svcName }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+spec:
+  host: svc-{{ $svcName }}
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    {{- range $trackName, $track := $svc.tracks }}
+    - name: {{ $trackName }}
+      labels:
+        track: {{ $trackName }}
+    {{- end }}
+{{- end }}
+{{- end }}

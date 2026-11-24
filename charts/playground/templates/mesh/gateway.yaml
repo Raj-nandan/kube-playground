@@ -1,0 +1,18 @@
+{{- if .Values.mesh.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ .Values.mesh.gateway.name | default "playground-gateway" }}
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: {{ .Values.mesh.gateway.port | default 80 }}
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+{{- end }}

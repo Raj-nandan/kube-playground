@@ -1,0 +1,58 @@
+{{- if .Values.mesh.enabled }}
+{{- range $svcName, $svc := .Values.services }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-{{ $svcName }}-ingress
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - {{ $.Values.mesh.gateway.name | default "playground-gateway" }}
+  http:
+    - match:
+        - uri:
+            exact: /{{ $svcName }}
+        - uri:
+            prefix: /{{ $svcName }}/
+      rewrite:
+        uri: /
+      route:
+        {{- range $trackName, $track := $svc.tracks }}
+        - destination:
+            host: svc-{{ $svcName }}
+            subset: {{ $trackName }}
+            port:
+              number: {{ $svc.ports.http | default 8080 }}
+          weight: {{ hasKey $track "weight" | ternary $track.weight 100 }}
+        {{- end }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-{{ $svcName }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    app: svc-{{ $svcName }}
+spec:
+  hosts:
+    - svc-{{ $svcName }}
+    - svc-{{ $svcName }}.{{ $.Release.Namespace }}.svc.cluster.local
+  gateways:
+    - mesh
+  http:
+    - route:
+        {{- range $trackName, $track := $svc.tracks }}
+        - destination:
+            host: svc-{{ $svcName }}
+            subset: {{ $trackName }}
+            port:
+              number: {{ $svc.ports.http | default 8080 }}
+          weight: {{ hasKey $track "weight" | ternary $track.weight 100 }}
+        {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if .Values.mesh.enabled }}
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      part-of: {{ .Values.global.partOf | default "playground" }}
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    {{ .Values.mesh.adminPort | default 9090 }}:
+      mode: PERMISSIVE
+{{- end }}
