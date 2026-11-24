@@ -24,6 +24,9 @@ spec:
         app: svc-b
         track: canary
         part-of: playground
+      annotations:
+        sidecar.istio.io/proxyCPU: "50m"
+        sidecar.istio.io/proxyMemory: "64Mi"
     spec:
       serviceAccountName: svc-b
       terminationGracePeriodSeconds: 30

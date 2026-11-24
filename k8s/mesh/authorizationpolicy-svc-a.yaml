@@ -1,0 +1,23 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: svc-a
+  namespace: apps
+spec:
+  selector:
+    matchLabels:
+      app: svc-a
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account
+              - cluster.local/ns/apps/sa/svc-b
+              - cluster.local/ns/apps/sa/svc-c
+      to:
+        - operation:
+            ports: ["8080"]
+    - to:
+        - operation:
+            ports: ["9090"]

@@ -38,7 +38,7 @@ spec:
             - name: POLL_INTERVAL_MS
               value: "2000"
             - name: BASE_URL
-              value: "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+              value: "http://istio-ingressgateway.istio-system.svc.cluster.local"
             - name: K6_IMAGE
               value: "grafana/k6:0.50.0"
           resources:

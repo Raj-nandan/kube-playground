@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: svc-a
+  namespace: apps
+spec:
+  host: svc-a
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    - name: blue
+      labels:
+        track: blue
+    - name: green
+      labels:
+        track: green

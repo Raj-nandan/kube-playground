@@ -9,7 +9,6 @@ metadata:
 spec:
   selector:
     app: svc-a
-    track: blue
   ports:
     - name: http
       port: 8080

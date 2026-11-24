@@ -34,9 +34,23 @@ export const ServiceLane: React.FC<ServiceLaneProps> = ({ service }) => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-400 font-mono">
-              Strategy: {service.name === 'a' ? 'Blue-Green' : service.name === 'b' ? 'Canary' : 'RollingUpdate'}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <p className="text-xs text-gray-400 font-mono">
+                Strategy: {service.name === 'a' ? 'Blue-Green' : service.name === 'b' ? 'Canary' : 'RollingUpdate'}
+              </p>
+              {service.traffic && service.traffic.length > 0 && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  {service.traffic.map((t, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-cyan-800/60 bg-cyan-950/40 text-cyan-300 font-semibold"
+                    >
+                      {t.release}: {t.weight}%
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

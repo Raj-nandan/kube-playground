@@ -61,6 +61,12 @@ export const PodCard: React.FC<PodCardProps> = ({ pod }) => {
         <span className="text-[10px] px-1.5 py-0.5 rounded border border-[#30363d] bg-[#161b22] text-gray-400 font-mono">
           track:{pod.track}
         </span>
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded border border-cyan-800/50 bg-cyan-950/40 text-cyan-300 font-mono"
+          title="Containers Ready / Total"
+        >
+          {pod.containers.filter((c) => c.ready).length}/{pod.containers.length}
+        </span>
         {pod.restarts > 0 && (
           <span className="text-[10px] px-1.5 py-0.5 rounded border border-rose-800 bg-rose-950/60 text-rose-300 flex items-center gap-0.5">
             <RotateCw className="w-2.5 h-2.5" />

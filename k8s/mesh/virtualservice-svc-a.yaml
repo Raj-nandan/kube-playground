@@ -1,0 +1,57 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-a-ingress
+  namespace: apps
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - playground-gateway
+  http:
+    - match:
+        - uri:
+            exact: /a
+        - uri:
+            prefix: /a/
+      rewrite:
+        uri: /
+      route:
+        - destination:
+            host: svc-a
+            subset: blue
+            port:
+              number: 8080
+          weight: 100
+        - destination:
+            host: svc-a
+            subset: green
+            port:
+              number: 8080
+          weight: 0
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-a
+  namespace: apps
+spec:
+  hosts:
+    - svc-a
+    - svc-a.apps.svc.cluster.local
+  gateways:
+    - mesh
+  http:
+    - route:
+        - destination:
+            host: svc-a
+            subset: blue
+            port:
+              number: 8080
+          weight: 100
+        - destination:
+            host: svc-a
+            subset: green
+            port:
+              number: 8080
+          weight: 0

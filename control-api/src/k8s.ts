@@ -12,7 +12,7 @@ export const customObjectsApi = kc.makeApiClient(k8s.CustomObjectsApi);
 
 export const APPS_NAMESPACE = process.env.APPS_NAMESPACE || 'apps';
 export const LOADTEST_NAMESPACE = process.env.LOADTEST_NAMESPACE || 'loadtest';
-export const BASE_URL = process.env.BASE_URL || 'http://ingress-nginx-controller.ingress-nginx.svc.cluster.local';
+export const BASE_URL = process.env.BASE_URL || 'http://istio-ingressgateway.istio-system.svc.cluster.local';
 export const K6_IMAGE = process.env.K6_IMAGE || 'grafana/k6:0.50.0';
 
 export async function createOrReplaceK6Job(service: string, params: StartLoadParams): Promise<void> {

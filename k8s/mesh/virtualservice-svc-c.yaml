@@ -1,0 +1,43 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-c-ingress
+  namespace: apps
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - playground-gateway
+  http:
+    - match:
+        - uri:
+            exact: /c
+        - uri:
+            prefix: /c/
+      rewrite:
+        uri: /
+      route:
+        - destination:
+            host: svc-c
+            subset: default
+            port:
+              number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-c
+  namespace: apps
+spec:
+  hosts:
+    - svc-c
+    - svc-c.apps.svc.cluster.local
+  gateways:
+    - mesh
+  http:
+    - route:
+        - destination:
+            host: svc-c
+            subset: default
+            port:
+              number: 8080

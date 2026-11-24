@@ -1,0 +1,57 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-b-ingress
+  namespace: apps
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - playground-gateway
+  http:
+    - match:
+        - uri:
+            exact: /b
+        - uri:
+            prefix: /b/
+      rewrite:
+        uri: /
+      route:
+        - destination:
+            host: svc-b
+            subset: stable
+            port:
+              number: 8080
+          weight: 100
+        - destination:
+            host: svc-b
+            subset: canary
+            port:
+              number: 8080
+          weight: 0
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: svc-b
+  namespace: apps
+spec:
+  hosts:
+    - svc-b
+    - svc-b.apps.svc.cluster.local
+  gateways:
+    - mesh
+  http:
+    - route:
+        - destination:
+            host: svc-b
+            subset: stable
+            port:
+              number: 8080
+          weight: 100
+        - destination:
+            host: svc-b
+            subset: canary
+            port:
+              number: 8080
+          weight: 0

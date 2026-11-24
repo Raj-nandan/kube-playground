@@ -12,6 +12,7 @@ import {
   ServiceState,
   PodState,
   ContainerState,
+  TrafficSplit,
   CallGraphEdge,
   EventItem,
 } from './types.js';
@@ -48,7 +49,7 @@ export async function pollCluster(): Promise<StateDocument> {
   const now = new Date().toISOString();
 
   // 1. Fetch K8s resources concurrently
-  const [podsRes, depsRes, hpasRes, eventsRes, jobsRes, metricsRes] = await Promise.all([
+  const [podsRes, depsRes, hpasRes, eventsRes, jobsRes, metricsRes, vsRes] = await Promise.all([
     coreApi.listNamespacedPod({ namespace: APPS_NAMESPACE }).catch(() => ({ items: [] })),
     appsApi.listNamespacedDeployment({ namespace: APPS_NAMESPACE }).catch(() => ({ items: [] })),
     autoscalingApi.listNamespacedHorizontalPodAutoscaler({ namespace: APPS_NAMESPACE }).catch(() => ({ items: [] })),
@@ -60,6 +61,14 @@ export async function pollCluster(): Promise<StateDocument> {
         version: 'v1beta1',
         namespace: APPS_NAMESPACE,
         plural: 'pods',
+      })
+      .catch(() => ({ items: [] })),
+    customObjectsApi
+      .listNamespacedCustomObject({
+        group: 'networking.istio.io',
+        version: 'v1beta1',
+        namespace: APPS_NAMESPACE,
+        plural: 'virtualservices',
       })
       .catch(() => ({ items: [] })),
   ]);
@@ -104,9 +113,13 @@ export async function pollCluster(): Promise<StateDocument> {
     const phase = pod.status?.phase || 'Pending';
     const isDeleting = !!pod.metadata?.deletionTimestamp;
 
-    // Containers and status
+    // Containers and status (including native sidecars like istio-proxy)
     const containerStatuses = pod.status?.containerStatuses || [];
-    const containers: ContainerState[] = containerStatuses.map((cs: any) => ({
+    const proxyStatus = (pod.status?.initContainerStatuses || []).filter(
+      (cs: any) => cs.name === 'istio-proxy'
+    );
+    const allStatuses = [...containerStatuses, ...proxyStatus];
+    const containers: ContainerState[] = allStatuses.map((cs: any) => ({
       name: cs.name,
       ready: !!cs.ready,
     }));
@@ -197,6 +210,27 @@ export async function pollCluster(): Promise<StateDocument> {
     readyContainers += p.containers.filter((c) => c.ready).length;
   }
 
+  // Map VirtualService traffic weights by service name ('a', 'b', 'c')
+  const trafficWeightsMap = new Map<string, TrafficSplit[]>();
+  const vsItems = (vsRes as any)?.items || [];
+  for (const vs of vsItems) {
+    const vsName = vs.metadata?.name || '';
+    const match = vsName.match(/^svc-([abc])(?:-ingress)?$/);
+    if (!match) continue;
+    const svcKey = match[1];
+
+    const routes = vs.spec?.http?.[0]?.route;
+    if (Array.isArray(routes) && routes.length > 0) {
+      const splits: TrafficSplit[] = routes.map((r: any) => ({
+        release: r.destination?.subset || 'default',
+        weight: typeof r.weight === 'number' ? r.weight : 100,
+      }));
+      if (!trafficWeightsMap.has(svcKey) || vsName === `svc-${svcKey}`) {
+        trafficWeightsMap.set(svcKey, splits);
+      }
+    }
+  }
+
   // 4. Assemble Services (a, b, c)
   const serviceNames: ('a' | 'b' | 'c')[] = ['a', 'b', 'c'];
   const services: ServiceState[] = serviceNames.map((svcName) => {
@@ -280,7 +314,7 @@ export async function pollCluster(): Promise<StateDocument> {
       errorsPerSec: 0.0,
       p95Ms: serviceP95,
       load: loadConfig,
-      traffic: [{ release: svcPods[0]?.release || 'current', weight: 100 }],
+      traffic: trafficWeightsMap.get(svcName) || [{ release: svcPods[0]?.release || 'current', weight: 100 }],
       pods: cleanPods,
     };
   });

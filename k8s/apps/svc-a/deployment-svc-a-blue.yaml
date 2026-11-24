@@ -24,6 +24,9 @@ spec:
         app: svc-a
         track: blue
         part-of: playground
+      annotations:
+        sidecar.istio.io/proxyCPU: "50m"
+        sidecar.istio.io/proxyMemory: "64Mi"
     spec:
       serviceAccountName: svc-a
       terminationGracePeriodSeconds: 30

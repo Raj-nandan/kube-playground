@@ -27,4 +27,9 @@ Thumbs.db
 
 # User requested ignored directories & files
 docs/
+AGENT.md
 commands.txt
+command.txt
+rollout-commands.txt
+mesh-commands.txt
+
