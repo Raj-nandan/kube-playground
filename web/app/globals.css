@@ -3,30 +3,80 @@
 @tailwind utilities;
 
 :root {
-  --background: #090d16;
-  --foreground: #f0f6fc;
+  /* Light Default: Technical Paper & Ink */
+  --bg: #F3F0E8;
+  --surface: #FBF9F4;
+  --surface-alt: #EFECE3;
+  --ink: #15171C;
+  --muted: #5B6068;
+  --hairline: #D9D4C7;
+  --hairline-dark: #BCB6A6;
+  
+  /* Signal color for activity & scaling (vermilion) */
+  --signal: #E4572E;
+  --signal-muted: rgba(228, 87, 46, 0.12);
+  
+  /* Desaturated state colors */
+  --ready: #2F7D4F;
+  --pending: #B7791F;
+  --failed: #A12A2A;
+}
+
+.dark {
+  /* Dark Variant: Warm Near-Black Industrial Console */
+  --bg: #121110;
+  --surface: #1B1A18;
+  --surface-alt: #24221F;
+  --ink: #E8E6DF;
+  --muted: #8E8A82;
+  --hairline: #2C2A26;
+  --hairline-dark: #3F3C36;
+  
+  --signal: #E4572E;
+  --signal-muted: rgba(228, 87, 46, 0.22);
+  
+  --ready: #3EA668;
+  --pending: #D4902A;
+  --failed: #C23838;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background-color: var(--bg);
+  font-family: var(--font-sans), sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   min-height: 100vh;
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #161b22;
-}
-::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #8b949e;
+/* Force Tabular Numbers for all metrics and mono fonts */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
+/* Terminating Hatched Texture Pattern */
+.bg-hatched {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    currentColor 4px,
+    currentColor 5px
+  );
+  opacity: 0.18;
+}
+
+/* Industrial Precision Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-alt);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hairline-dark);
+  border-radius: 0px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}

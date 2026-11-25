@@ -12,6 +12,27 @@ Instead of working with opaque black-box services or static examples, Kube Playg
 
 ---
 
+## Live Telemetry Dashboard & Pod Lifecycle
+
+The dashboard provides real-time visibility into the cluster state through an event-driven Server-Sent Events (SSE) telemetry stream. Pods dynamically transition through their authentic Kubernetes lifecycle states with distinct color coding, CPU gauges relative to the 50% HPA target, dual-container readiness chips (`app`, `mesh`), and throughput metrics:
+
+### 1. Ready State (`● READY`)
+*Pods are healthy, container readiness probes have passed (`app ✓`, `mesh ✓`), and workloads are actively handling incoming traffic with stable CPU utilization.*
+
+![Ready Pods State](assets/screenshots/dashboard-ready.jpg)
+
+### 2. Running & Scaling Up State (`◐ RUNNING` / `Scaling Up`)
+*Triggered under load injection: the Horizontal Pod Autoscaler (HPA) detects CPU saturation above the 50% target threshold and scales out new replicas. Transitional pods enter the running state while containers initialize.*
+
+![Running Pods State](assets/screenshots/dashboard-running.jpg)
+
+### 3. Terminating & Scaling Down State (`▨ TERMINATING` / `Scaling Down`)
+*When traffic load ceases and CPU utilization subsides below target, the HPA stabilization window engages. Kubernetes gracefully drains and terminates excess replicas, visualized with hatched red styling.*
+
+![Terminating Pods State](assets/screenshots/dashboard-terminating.jpg)
+
+---
+
 ## Problem Statement
 
 Understanding Kubernetes mechanics—such as Pod lifecycles, Horizontal Pod Autoscaling (HPA), Ingress routing, resource requests versus limits, and multi-service failure propagation—is often challenging:
@@ -93,7 +114,7 @@ kube-playground/
 │   │   └── ingress-playground.yaml
 │   ├── platform/                # Platform control plane manifests
 │   │   ├── deployment-control-api.yaml
-│   │   ├── deployment-web.yaml  # Pinned to web:v1 with imagePullPolicy: Never
+│   │   ├── deployment-web.yaml  # Pinned to web:v4 with imagePullPolicy: Never
 │   │   ├── ingress-platform.yaml
 │   │   └── role-control-api-*.yaml # Scoped RBAC configurations
 │   └── loadtest/                # k6 load testing scripts and ConfigMaps
@@ -163,8 +184,8 @@ docker build -t svc-c:next --build-arg SERVICE_NAME=svc-c --build-arg RELEASE=ne
 # Control API Backend
 docker build -t control-api:v2 ./control-api
 
-# Web Dashboard (pinned to explicit version web:v1)
-docker build -t web:v1 ./web
+# Web Dashboard (pinned to explicit version web:v4)
+docker build -t web:v4 ./web
 
 # Pinned Load Generator Image
 docker pull grafana/k6:0.50.0
@@ -175,7 +196,7 @@ docker pull grafana/k6:0.50.0
 Transfer the locally built images directly into Minikube's Docker runtime:
 
 ```bash
-minikube image load svc-a:blue svc-a:green svc-b:stable svc-b:canary svc-c:current svc-c:next control-api:v2 web:v1 grafana/k6:0.50.0
+minikube image load svc-a:blue svc-a:green svc-b:stable svc-b:canary svc-c:current svc-c:next control-api:v2 web:v4 grafana/k6:0.50.0
 ```
 
 ### 5. Deploy Manifests to Kubernetes

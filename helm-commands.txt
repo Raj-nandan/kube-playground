@@ -1,0 +1,79 @@
+# ==============================================================================
+# Kube Playground - Phase 10: Helm Operations & Rollout Cheatsheet
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Linting & Template Rendering (Validation)
+# ------------------------------------------------------------------------------
+# Lint the chart for syntax and best practices:
+helm lint charts/playground
+
+# Dry run / template render for Mesh mode (default):
+helm template playground charts/playground -n apps
+
+# Dry run / template render for Meshless mode (traditional K8s selectors):
+helm template playground charts/playground -f charts/playground/values-meshless.yaml -n apps
+
+# ------------------------------------------------------------------------------
+# 2. Installation (Fresh Namespace)
+# ------------------------------------------------------------------------------
+# Create a fresh isolated namespace:
+kubectl create namespace apps-helm
+kubectl label namespace apps-helm istio-injection=enabled
+
+# Install the full workload stack from the chart:
+helm install playground charts/playground -n apps-helm
+
+# Verify all resources deployed:
+helm list -n apps-helm
+kubectl get pods,svc,hpa,gateway,virtualservice,destinationrule -n apps-helm
+
+# ------------------------------------------------------------------------------
+# 3. Rollout Strategies via Helm Values Upgrades
+# ------------------------------------------------------------------------------
+
+# --- Strategy A: Blue-Green Cutover on svc-a ---
+# Scale up green replica and flip traffic (0% blue / 100% green):
+helm upgrade playground charts/playground -n apps-helm \
+  --set services.a.tracks.green.replicas=1 \
+  --set services.a.tracks.blue.weight=0 \
+  --set services.a.tracks.green.weight=100
+
+# Verify traffic flipped to green.
+# Instant rollback to previous release (Revision 1):
+helm rollback playground 1 -n apps-helm
+
+
+# --- Strategy B: Canary Traffic Split on svc-b ---
+# Deploy canary with 25% traffic share (75% stable / 25% canary):
+helm upgrade playground charts/playground -n apps-helm \
+  --set services.b.tracks.canary.replicas=1 \
+  --set services.b.tracks.stable.weight=75 \
+  --set services.b.tracks.canary.weight=25
+
+# Step up to 50/50:
+helm upgrade playground charts/playground -n apps-helm \
+  --set services.b.tracks.canary.replicas=1 \
+  --set services.b.tracks.stable.weight=50 \
+  --set services.b.tracks.canary.weight=50
+
+# Complete rollout (100% canary) or revert back:
+helm rollback playground 1 -n apps-helm
+
+
+# --- Strategy C: Rolling Update on svc-c ---
+# Upgrade svc-c image from current to next:
+helm upgrade playground charts/playground -n apps-helm \
+  --set services.c.tracks.current.tag=next
+
+# Check rollout status:
+kubectl rollout status deployment/svc-c-current -n apps-helm
+
+# ------------------------------------------------------------------------------
+# 4. Cleanup
+# ------------------------------------------------------------------------------
+# Uninstall the release:
+helm uninstall playground -n apps-helm
+
+# Delete the test namespace:
+kubectl delete namespace apps-helm

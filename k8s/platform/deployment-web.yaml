@@ -22,7 +22,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: web
-          image: web:v1
+          image: web:v4
           imagePullPolicy: Never
           ports:
             - name: http

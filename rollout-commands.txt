@@ -1,0 +1,153 @@
+# ==============================================================================
+# Kube Playground - Deployment & Rollout Strategies Playbook
+# ==============================================================================
+# This guide contains all commands and YAML edit instructions for the 3 core
+# Kubernetes rollout strategies:
+#   1. Rolling Update (svc-c) - Zero downtime pod-by-pod replacement
+#   2. Blue-Green (svc-a)     - Instant cutover & 1-second emergency rollback
+#   3. Canary (svc-b)         - Partial exposure & replica-ratio traffic split
+# ==============================================================================
+
+
+# ==============================================================================
+# STRATEGY 1: ROLLING UPDATE (Service: svc-c)
+# ==============================================================================
+# Concept:
+# - Replaces old pods with new pods one by one.
+# - Controlled by `maxSurge` (how many extra pods can be created above target)
+#   and `maxUnavailable` (how many pods can be down during the rollout).
+# - With maxSurge=1 and maxUnavailable=0, Kubernetes never terminates an old pod
+#   until the new pod passes its readiness probe, ensuring 0 dropped requests.
+# - Trade-off: Users temporarily experience mixed versions (both old and new).
+# ==============================================================================
+
+# Step 1.1: Verify baseline pod and image
+kubectl get pods -n apps -l app=svc-c -o wide
+
+# Step 1.2: Start synthetic load on svc-c (via UI or CLI)
+# In Dashboard: Set svc-c slider to 30 VUs -> Click "Start Load"
+
+# Step 1.3: Edit k8s/apps/svc-c/deployment-svc-c.yaml:
+# Change: image: svc-c:current  ->  image: svc-c:next
+
+# Step 1.4: Preview planned changes before applying (Best Practice)
+kubectl diff -f k8s/apps/svc-c/deployment-svc-c.yaml
+
+# Step 1.5: Apply the rolling update
+kubectl apply -f k8s/apps/svc-c/deployment-svc-c.yaml
+
+# Step 1.6: Watch the rolling update progress in real time
+kubectl rollout status deployment/svc-c -n apps
+
+# Step 1.7: Inspect deployment revision history
+kubectl rollout history deployment/svc-c -n apps
+
+# Step 1.8: Rollback (Declarative GitOps way - Recommended)
+# Revert image back to: image: svc-c:current in deployment-svc-c.yaml, then:
+kubectl apply -f k8s/apps/svc-c/deployment-svc-c.yaml
+
+# Step 1.9: Alternative imperative rollback (Kubernetes internal undo)
+# kubectl rollout undo deployment/svc-c -n apps
+
+# Step 1.10: Stop load test on svc-c in the dashboard
+
+
+# ==============================================================================
+# STRATEGY 2: BLUE-GREEN DEPLOYMENT (Service: svc-a)
+# ==============================================================================
+# Concept:
+# - Two separate Deployments exist: svc-a-blue (active) and svc-a-green (standby).
+# - The Kubernetes Service selects `track: blue` or `track: green`.
+# - Eliminates mixed versions: 100% of traffic hits Blue, or 100% hits Green.
+# - Allows pre-warming and smoke-testing Green before sending any user traffic.
+# - Provides instant cutover and 1-second instant rollback.
+# - Trade-off: Requires 2x capacity during the transition.
+# ==============================================================================
+
+# Step 2.1: Pre-warm Green environment (Scale from 0 to 1 replica)
+# Edit k8s/apps/svc-a/deployment-svc-a-green.yaml: replicas: 1 (or run via CLI):
+kubectl scale deployment/svc-a-green -n apps --replicas=1
+
+# Step 2.2: Verify both deployments exist (Blue is serving, Green is idle)
+kubectl get pods -n apps -l app=svc-a -L track
+
+# Step 2.3: Start synthetic load on svc-a (30-40 VUs via Dashboard)
+# Notice on Dashboard: Blue pods handle ~35 RPS; Green pod shows 0 RPS.
+
+# Step 2.4: Pre-flight smoke test against Green in isolation (before cutover)
+kubectl exec -n apps deploy/svc-a-green -c app -- wget -qO- http://localhost:8080/whoami
+# Expected: {"service":"a","release":"green","track":"green"}
+
+# Step 2.5: The Cutover - Flip Service selector from blue to green
+# Edit k8s/apps/svc-a/service-svc-a.yaml:
+# Change: track: blue  ->  track: green
+kubectl apply -f k8s/apps/svc-a/service-svc-a.yaml
+
+# Step 2.6: Verify cutover in dashboard:
+# Green immediately jumps to 100% of the traffic (~35 RPS). Blue drops to 0.
+
+# Step 2.7: Emergency Rollback Drill (Simulate faulty release on Green)
+# In deployment-svc-a-green.yaml, add env var: ERROR_RATE: "0.3"
+# Apply: kubectl apply -f k8s/apps/svc-a/deployment-svc-a-green.yaml
+# Dashboard displays: red "Errors: ~10/s" alert.
+
+# Step 2.8: Instant 1-Second Rollback (Flip Service selector back to Blue)
+# In service-svc-a.yaml, change: track: green  ->  track: blue
+kubectl apply -f k8s/apps/svc-a/service-svc-a.yaml
+# Dashboard: Errors immediately drop to 0.0/s. Blue resumes 100% of traffic.
+
+# Step 2.9: Post-rollback cleanup (Scale idle Green deployment back to 0)
+kubectl scale deployment/svc-a-green -n apps --replicas=0
+
+# Step 2.10: Stop load test on svc-a in the dashboard
+
+
+# ==============================================================================
+# STRATEGY 3: CANARY DEPLOYMENT (Service: svc-b)
+# ==============================================================================
+# Concept:
+# - Routes a small percentage of real user traffic to a new release (Canary).
+# - In native Kubernetes, Service routes via round-robin to all pods with `app: svc-b`.
+# - Traffic split is determined by REPLICA RATIO (not percentage weights).
+#   Example: 1 Stable pod + 1 Canary pod = 50% / 50% split.
+# - Key Limitation: If HPA scales Stable from 1 to 4 pods, Canary share
+#   unintentionally shrinks from 50% down to 20% (1 out of 5 pods).
+# - This architectural flaw is the primary motivation for Phase 8 (Istio mesh).
+# ==============================================================================
+
+# Step 3.1: Verify Service selector points only to `app: svc-b` (no track label)
+kubectl get svc -n apps svc-b -o yaml | grep -A 2 selector
+
+# Step 3.2: Deploy Canary pod alongside Stable (Scale canary to 1 replica)
+kubectl scale deployment/svc-b-canary -n apps --replicas=1
+
+# Step 3.3: Verify both pods are Running
+kubectl get pods -n apps -l app=svc-b -L track
+
+# Step 3.4: Start synthetic load on svc-b (20 VUs in Dashboard)
+# Observe Dashboard: Traffic is divided equally (~10-12 RPS to stable, ~10-12 RPS to canary).
+
+# Step 3.5: The Autoscaler Dilemma Experiment (Observe HPA skewing canary ratio)
+# Crank svc-b slider to 50 VUs.
+# Watch HPA scale svc-b-stable from 1 -> 4 pods.
+# Observe in Dashboard: Total pods = 5. Canary pod now receives only 20% of traffic.
+
+# Step 3.6: Rollback Canary (Eliminate experimental traffic immediately)
+# Scale the canary deployment to zero:
+kubectl scale deployment/svc-b-canary -n apps --replicas=0
+
+# Step 3.7: Verify only stable pods remain
+kubectl get pods -n apps -l app=svc-b
+
+# Step 3.8: Stop load test on svc-b in the dashboard
+
+
+# ==============================================================================
+# GENERAL OPERATIONAL CHECKS
+# ==============================================================================
+
+# Watch all pods and HPAs live during rollouts:
+# kubectl get pods,hpa -n apps -w
+
+# Check endpoint addresses currently registered behind each service:
+# kubectl get endpoints -n apps

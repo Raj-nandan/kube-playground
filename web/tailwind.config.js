@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -8,12 +9,31 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: '#0d1117',
-        surface: '#161b22',
-        border: '#30363d',
+        bg: 'var(--bg)',
+        surface: 'var(--surface)',
+        'surface-alt': 'var(--surface-alt)',
+        ink: 'var(--ink)',
+        muted: 'var(--muted)',
+        hairline: 'var(--hairline)',
+        'hairline-dark': 'var(--hairline-dark)',
+        signal: 'var(--signal)',
+        'signal-muted': 'var(--signal-muted)',
+        ready: 'var(--ready)',
+        pending: 'var(--pending)',
+        failed: 'var(--failed)',
+      },
+      fontFamily: {
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+      },
+      borderRadius: {
+        none: '0px',
+        sm: '2px',
+        DEFAULT: '3px',
+        md: '4px',
       },
     },
   },
   plugins: [],
 };
-

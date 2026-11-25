@@ -1,0 +1,67 @@
+# ==============================================================================
+# Kube Playground - Setup & Execution Commands Playbook
+# ==============================================================================
+
+# 1. Start Minikube & Enable Essential Addons
+minikube start --driver=docker --cpus=3 --memory=3072
+minikube addons enable metrics-server
+minikube addons enable ingress
+
+# 2. Build Microservice Docker Images (services/Dockerfile)
+docker build -t svc-a:blue --build-arg SERVICE_NAME=svc-a --build-arg RELEASE=blue -f services/Dockerfile services/
+docker build -t svc-a:green --build-arg SERVICE_NAME=svc-a --build-arg RELEASE=green -f services/Dockerfile services/
+docker build -t svc-b:stable --build-arg SERVICE_NAME=svc-b --build-arg RELEASE=stable -f services/Dockerfile services/
+docker build -t svc-b:canary --build-arg SERVICE_NAME=svc-b --build-arg RELEASE=canary -f services/Dockerfile services/
+docker build -t svc-c:current --build-arg SERVICE_NAME=svc-c --build-arg RELEASE=current -f services/Dockerfile services/
+docker build -t svc-c:next --build-arg SERVICE_NAME=svc-c --build-arg RELEASE=next -f services/Dockerfile services/
+
+# 3. Build Control API Backend (Hermetic Multi-Stage Docker Build)
+docker build -t control-api:v2 ./control-api
+
+# 4. Build Web Dashboard Frontend (Hermetic Multi-Stage Docker Build, Tagged web:v1)
+docker build -t web:v1 ./web
+
+# 5. Pull Pinned k6 Load Generator Image
+docker pull grafana/k6:0.50.0
+
+# 6. Load All Images into Minikube Node
+minikube image load svc-a:blue svc-a:green svc-b:stable svc-b:canary svc-c:current svc-c:next control-api:v2 web:v1 grafana/k6:0.50.0
+
+# 7. Apply All Kubernetes Manifests
+kubectl apply -f k8s/namespaces/
+kubectl apply -f k8s/apps/svc-a/
+kubectl apply -f k8s/apps/svc-b/
+kubectl apply -f k8s/apps/svc-c/
+kubectl apply -f k8s/apps/ingress-playground.yaml
+kubectl apply -f k8s/loadtest/configmap-k6-script.yaml
+kubectl apply -f k8s/platform/
+
+# 8. Verify Running Pods (wait ~15-30s for Ready 1/1)
+kubectl get pods -n apps
+kubectl get pods -n platform
+
+# 9. Access Web Dashboard (open http://localhost:3000)
+kubectl port-forward -n platform svc/web 3000:3000
+
+# ==============================================================================
+# Operational & Ingress Access Commands
+# ==============================================================================
+
+# Direct Microservices Ingress Access from Host (ports /a, /b, /c to localhost:8080)
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+# Test via: curl http://localhost:8080/a/whoami
+
+# Optional: Direct Port-Forward to Control API (http://localhost:4000)
+kubectl port-forward -n platform svc/control-api 4000:4000
+
+# Stop all active load test jobs
+kubectl delete jobs --all -n loadtest
+
+# Force Rollout Restart after rebuilding images with same tags
+kubectl rollout restart deployment/web -n platform
+kubectl rollout restart deployment/control-api -n platform
+kubectl rollout restart deployment -n apps
+
+# Inspect HPA auto-scaling status
+kubectl get hpa -n apps
+kubectl get hpa,pods -n apps -w

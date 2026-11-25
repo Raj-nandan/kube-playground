@@ -1,0 +1,114 @@
+# ==============================================================================
+# Kube Playground - Phase 8: Istio Service Mesh Reference & Command Cheatsheet
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Mesh Installation & Sidecar Injection
+# ------------------------------------------------------------------------------
+# Install Istio with customized low-memory operator profile:
+istioctl install -f k8s/mesh/istio-operator.yaml -y
+
+# Verify control plane and ingress gateway are running:
+kubectl get pods -n istio-system
+
+# Enable automatic Envoy sidecar injection on namespace "apps":
+kubectl label namespace apps istio-injection=enabled --overwrite
+
+# Restart deployments to inject Envoy sidecars (app + istio-proxy = 2/2 ready):
+kubectl rollout restart deployment/svc-a-blue deployment/svc-b-stable deployment/svc-c -n apps
+
+# Verify all app pods report READY 2/2:
+kubectl get pods -n apps
+
+# ------------------------------------------------------------------------------
+# 2. Ingress Gateway & DestinationRules
+# ------------------------------------------------------------------------------
+# Apply the Istio Gateway and subset DestinationRules:
+kubectl apply -f k8s/mesh/gateway-playground.yaml
+kubectl apply -f k8s/mesh/destinationrule-svc-a.yaml
+kubectl apply -f k8s/mesh/destinationrule-svc-b.yaml
+kubectl apply -f k8s/mesh/destinationrule-svc-c.yaml
+
+# Apply the VirtualServices (ingress prefix rewriting /a -> /, /b -> /, /c -> /):
+kubectl apply -f k8s/mesh/virtualservice-svc-a.yaml
+kubectl apply -f k8s/mesh/virtualservice-svc-b.yaml
+kubectl apply -f k8s/mesh/virtualservice-svc-c.yaml
+
+# Delete the legacy NGINX Ingress controller resource:
+kubectl delete -f k8s/apps/ingress-playground.yaml
+
+# Update control-api and RBAC to point BASE_URL to istio-ingressgateway:
+kubectl apply -f k8s/platform/role-control-api-apps.yaml -f k8s/platform/deployment-control-api.yaml
+
+# Verify all three services respond via Istio Ingress Gateway:
+kubectl exec -n platform deployment/control-api -- node -e "Promise.all(['/a/whoami', '/b/whoami', '/c/whoami'].map(p => fetch('http://istio-ingressgateway.istio-system.svc.cluster.local' + p).then(r => r.json()))).then(console.log)"
+
+# ------------------------------------------------------------------------------
+# 3. Zero-Trust Security (STRICT mTLS & AuthorizationPolicy)
+# ------------------------------------------------------------------------------
+# Enforce STRICT mTLS across apps with port 9090 exempted for telemetry scraping:
+kubectl apply -f k8s/mesh/peerauthentication-default.yaml
+
+# Apply least-privilege AuthorizationPolicies (allow gateway and valid siblings):
+kubectl apply -f k8s/mesh/authorizationpolicy-svc-a.yaml -f k8s/mesh/authorizationpolicy-svc-b.yaml -f k8s/mesh/authorizationpolicy-svc-c.yaml
+
+# Test unauthorized traffic rejection (fails with connection reset / dropped):
+kubectl run unauthorized-test --image=curlimages/curl:8.7.1 --rm -i --restart=Never -- curl -s -m 3 http://svc-a.apps.svc.cluster.local:8080/whoami
+
+# ------------------------------------------------------------------------------
+# 4. Traffic Management Drills
+# ------------------------------------------------------------------------------
+# --- Drill A: Blue-Green Cutover on svc-a ---
+# 1. Scale up green:
+kubectl scale deployment svc-a-green -n apps --replicas=1
+
+# 2. Check current 100% blue traffic:
+kubectl exec -n platform deployment/control-api -- node -e "Promise.all(Array.from({length: 5}, () => fetch('http://istio-ingressgateway.istio-system.svc.cluster.local/a/whoami').then(r => r.json()))).then(res => console.log(res.map(r => r.track)))"
+
+# 3. Flip to green: In k8s/mesh/virtualservice-svc-a.yaml, set blue weight: 0, green weight: 100
+kubectl apply -f k8s/mesh/virtualservice-svc-a.yaml
+
+# 4. Instant rollback to blue: In k8s/mesh/virtualservice-svc-a.yaml, set blue weight: 100, green weight: 0
+kubectl apply -f k8s/mesh/virtualservice-svc-a.yaml
+
+# --- Drill B: Weighted Canary Split on svc-b ---
+# 1. Scale up canary:
+kubectl scale deployment svc-b-canary -n apps --replicas=1
+
+# 2. Set 90/10 split in k8s/mesh/virtualservice-svc-b.yaml (stable: 90, canary: 10):
+kubectl apply -f k8s/mesh/virtualservice-svc-b.yaml
+
+# 3. Test 20 requests:
+kubectl exec -n platform deployment/control-api -- node -e "Promise.all(Array.from({length: 20}, () => fetch('http://istio-ingressgateway.istio-system.svc.cluster.local/b/whoami').then(r => r.json()))).then(res => console.log(res.reduce((acc, r) => { acc[r.track] = (acc[r.track] || 0) + 1; return acc; }, {})))"
+
+# 4. Step up to 50/50 in k8s/mesh/virtualservice-svc-b.yaml (stable: 50, canary: 50):
+kubectl apply -f k8s/mesh/virtualservice-svc-b.yaml
+
+# 5. Clean up canary: Reset stable: 100, canary: 0 and scale down canary:
+kubectl apply -f k8s/mesh/virtualservice-svc-b.yaml
+kubectl scale deployment svc-b-canary -n apps --replicas=0
+
+# ------------------------------------------------------------------------------
+# 5. Mesh Resilience & Chaos Drills (Timeouts & Fault Injection)
+# ------------------------------------------------------------------------------
+# --- Fault Injection (HTTP 500 Abort) ---
+# Add to k8s/mesh/virtualservice-svc-c.yaml under http:
+# fault:
+#   abort:
+#     percentage:
+#       value: 50.0
+#     httpStatus: 500
+kubectl apply -f k8s/mesh/virtualservice-svc-c.yaml
+
+# --- Timeouts (HTTP 504 Gateway Timeout) ---
+# Add to k8s/mesh/virtualservice-svc-c.yaml:
+# timeout: 0.5s
+# fault:
+#   delay:
+#     percentage:
+#       value: 100.0
+#     fixedDelay: 2s
+kubectl apply -f k8s/mesh/virtualservice-svc-c.yaml
+
+# --- Remove Faults & Restore svc-c ---
+kubectl apply -f k8s/mesh/virtualservice-svc-c.yaml
